@@ -1,6 +1,10 @@
 # Environment & secrets
 .env
+.env.local
+*.env
 APIs.txt
+secrets.*
+*.db
 
 # Python-generated files
 __pycache__/
@@ -27,5 +31,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Data (local downloads)
+# Data (local downloads and generated outputs)
 data/
+evals/results/
