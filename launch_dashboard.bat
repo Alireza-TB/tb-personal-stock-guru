@@ -28,16 +28,20 @@ start "Streamlit" /min "%UV%" run streamlit run ui/app.py --server.headless=true
 
 echo  Waiting for server...
 
-:: Poll every second for up to 90s
-set MAX=90
+:: Poll using curl (built into Windows 10/11).
+:: curl starts instantly — no 2-3s PowerShell startup overhead per iteration.
+:: --max-time 2 handles IPv6-first dual-stack without false timeouts.
+:: Each iteration is ~2s worst-case; 150 iterations = 5 minutes maximum wait.
+set MAX=150
 set W=0
 
 :poll
-powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:8501' -TimeoutSec 1 -UseBasicParsing -EA Stop;exit $r.StatusCode}catch{exit 0}" >nul 2>&1
-if %ERRORLEVEL% equ 200 goto ready
+set STATUS=000
+for /f %%s in ('curl -s -o nul -w "%%{http_code}" --max-time 2 http://localhost:8501 2^>nul') do set STATUS=%%s
+if "%STATUS%"=="200" goto ready
 set /a W+=1
 if %W% geq %MAX% (
-    echo  WARNING: still not up after %MAX%s - opening browser anyway.
+    echo  WARNING: still not up after %MAX% attempts - opening browser anyway.
     goto open
 )
 ping -n 2 127.0.0.1 >nul 2>&1
