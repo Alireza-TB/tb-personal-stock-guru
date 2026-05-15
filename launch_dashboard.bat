@@ -14,9 +14,19 @@ echo  Stop: Ctrl+C in this window
 echo ============================================================
 echo.
 
+:: Use the full path to uv so this works when launched via wscript.exe
+:: (which runs with a minimal system PATH that excludes user-local installs).
+set UV=%USERPROFILE%\.local\bin\uv.exe
+if not exist "%UV%" (
+    echo  ERROR: uv not found at %UV%
+    echo  Try running launch_dashboard.bat from a terminal instead.
+    pause
+    exit /b 1
+)
+
 :: Start Streamlit headless in the background.
 :: --server.headless=true suppresses Streamlit's own browser-open attempt.
-start "" /b uv run streamlit run ui/app.py --server.headless=true
+start "" /b "%UV%" run streamlit run ui/app.py --server.headless=true
 
 :: -- Health-check poll ------------------------------------------
 :: Poll every second until HTTP 200 or 15s elapsed.
