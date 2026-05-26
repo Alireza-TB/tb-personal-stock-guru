@@ -1,0 +1,50 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# Secrets (mounted at runtime)
+.env
+.env.*
+# Keep .env.example — no secrets, useful reference
+!.env.example
+
+# Data (mounted volume at runtime)
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# LangGraph / tooling
+.langgraph_api/
+
+# Evals output
+evals/results/
+
+# Claude Code
+.claude/
+
+# Presentation / media artefacts
+*.pptx
+*.pdf
+slide-*.jpg
+stockguru_deck/
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Tests (not needed in prod image)
+tests/

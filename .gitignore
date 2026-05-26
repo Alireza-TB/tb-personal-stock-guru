@@ -34,3 +34,6 @@ Thumbs.db
 # Data (local downloads and generated outputs)
 data/
 evals/results/
+
+.claude/
+

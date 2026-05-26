@@ -1,0 +1,6 @@
+:8501 {
+    basic_auth {
+        onefoldai $2a$10$.4mTFKyPtrGTubz70oDMQezKlrQfPCFIZBfOC5zW6OQZ9aTw0uwHK
+    }
+    reverse_proxy stockguru:8501
+}

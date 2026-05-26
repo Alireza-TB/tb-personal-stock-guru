@@ -134,6 +134,26 @@ uv run streamlit run ui/app.py
 
 Opens at http://localhost:8501. Four tabs: Research (run + stream live results), Portfolio (sparkline cards for your holdings), Archive (searchable memo history), Settings (user profile).
 
+### Run with Docker
+
+Alternatively, run the full stack (Streamlit + Caddy reverse proxy with basic auth) in containers:
+
+```bash
+cp .env.example .env
+# edit .env with your keys
+docker compose up -d
+```
+
+Opens at http://localhost:8501. You'll be prompted for HTTP basic-auth credentials before reaching the dashboard. To set your own credentials, edit `Caddyfile` and replace the bcrypt hash:
+
+```bash
+docker run --rm caddy:2-alpine caddy hash-password --plaintext "your-password"
+```
+
+Then restart Caddy: `docker compose restart caddy`.
+
+Data persists in `./data/` (SQLite databases) across container restarts.
+
 ### Run the eval harness
 
 ```bash

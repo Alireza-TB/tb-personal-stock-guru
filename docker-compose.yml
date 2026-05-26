@@ -1,0 +1,27 @@
+services:
+  stockguru:
+    build: .
+    container_name: stockguru
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "8501"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: stockguru-caddy
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - stockguru
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
