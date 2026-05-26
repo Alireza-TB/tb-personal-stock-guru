@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,8 +25,8 @@ from agents.bull import bull_node
 from agents.debate import debate_node
 from agents.news_hunter import news_hunter_node
 from agents.portfolio_manager import portfolio_manager_node
-from memory.store import build_store, save_memo
-from state import AnalystFindings, DebateRound, InvestmentMemo, NewsFindings, ResearchState
+from memory.store import build_store, save_memo, save_research_record
+from state import AnalystFindings, DebateRound, InvestmentMemo, NewsFindings, ResearchRecord, ResearchState
 
 # ---------------------------------------------------------------------------
 # Planner node (inline — lightweight, for UI explainability only)
@@ -65,12 +65,35 @@ _MEM_PATH = _DATA_DIR / "memory.db"
 
 
 def _make_archive_node(store):
-    """Return a closure that saves the final memo to the long-term store."""
+    """Return a closure that saves the full ResearchRecord (and legacy memo) to the store."""
     @traceable(name="archive_node", run_type="tool")
     def archive_node(state: ResearchState) -> dict:
-        memo = state.get("final_memo")
-        if memo:
-            save_memo(store, state["ticker"], memo)
+        memo: InvestmentMemo | None = state.get("final_memo")
+        analyst = state.get("analyst_findings")
+        news = state.get("news_findings")
+
+        if not memo:
+            return {}
+
+        # Legacy memo save — keeps existing "memos" namespace intact.
+        save_memo(store, state["ticker"], memo)
+
+        # Rich record save — only when we have full findings.
+        if analyst and news:
+            record = ResearchRecord(
+                timestamp=datetime.now(timezone.utc),
+                ticker=state["ticker"],
+                plan=state.get("plan") or [],
+                analyst_findings=analyst,
+                news_findings=news,
+                bull_case=state.get("bull_case") or "",
+                bear_case=state.get("bear_case") or "",
+                debate_rounds=state.get("debate_rounds") or [],
+                final_memo=memo,
+                tools_used=state.get("tools_used") or {},
+            )
+            save_research_record(store, record)
+
         return {}
     return archive_node
 

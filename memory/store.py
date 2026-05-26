@@ -11,7 +11,7 @@ from langgraph.store.sqlite import SqliteStore
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from state import InvestmentMemo
+    from state import InvestmentMemo, ResearchRecord
 
 _USER_NS = ("user", "profile")
 _PROFILE_KEY = "profile"
@@ -59,6 +59,34 @@ def get_memo_history(store: BaseStore, ticker: str, limit: int = 5) -> list["Inv
 
 
 # ---------------------------------------------------------------------------
+# ResearchRecord helpers  (new rich archive — namespace "research")
+# ---------------------------------------------------------------------------
+
+@traceable(name="save_research_record", run_type="tool")
+def save_research_record(store: BaseStore, record: "ResearchRecord") -> None:
+    """Persist a full ResearchRecord under ("research", ticker) keyed by UTC timestamp."""
+    key = record.timestamp.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    store.put(("research", record.ticker.upper()), key, record.model_dump(mode="json"))
+
+
+def get_research_records(
+    store: BaseStore, ticker: str, limit: int = 20
+) -> list["ResearchRecord"]:
+    """Return the most recent N ResearchRecords for a ticker, newest first."""
+    from state import ResearchRecord
+
+    items = store.search(("research", ticker.upper()), limit=200)
+    items_sorted = sorted(items, key=lambda x: x.key, reverse=True)[:limit]
+    records: list[ResearchRecord] = []
+    for item in items_sorted:
+        try:
+            records.append(ResearchRecord(**item.value))
+        except Exception:
+            pass
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Profile helpers
 # ---------------------------------------------------------------------------
 
@@ -86,13 +114,18 @@ def update_user_profile(store: BaseStore, **fields) -> UserProfile:
 # ---------------------------------------------------------------------------
 
 def list_all_tickers(store: BaseStore) -> list[str]:
-    """Return a sorted list of all distinct tickers that have at least one memo."""
+    """Return a sorted list of all distinct tickers with at least one record.
+
+    Checks both the legacy ("memos",) namespace and the new ("research",)
+    namespace so the list stays complete regardless of which path stored data.
+    """
     tickers: set[str] = set()
     try:
-        namespaces = store.list_namespaces(prefix=("memos",))
-        for ns in namespaces:
-            if isinstance(ns, (list, tuple)) and len(ns) >= 2 and ns[0] == "memos":
-                tickers.add(str(ns[1]))
+        for prefix in (("memos",), ("research",)):
+            namespaces = store.list_namespaces(prefix=prefix)
+            for ns in namespaces:
+                if isinstance(ns, (list, tuple)) and len(ns) >= 2:
+                    tickers.add(str(ns[1]))
     except Exception:
         pass
     return sorted(tickers)
@@ -125,7 +158,16 @@ def build_memory_context(store: Optional[BaseStore], ticker: str) -> str:
         if profile_parts:
             lines.append("User context — " + " | ".join(profile_parts))
 
-        if memos:
+        # Prefer the rich ResearchRecord archive; fall back to legacy memos.
+        records = get_research_records(store, ticker, limit=3)
+        if records:
+            latest = records[0].final_memo
+            lines.append(
+                f"Prior research on {ticker.upper()} ({len(records)} run(s)) — "
+                f"most recent: {latest.recommendation}, conviction {latest.conviction}/5. "
+                f"Thesis: {latest.thesis}"
+            )
+        elif memos:
             latest = memos[0]
             lines.append(
                 f"Prior research on {ticker.upper()} ({len(memos)} run(s)) — "

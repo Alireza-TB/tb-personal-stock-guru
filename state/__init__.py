@@ -3,11 +3,13 @@ from state.research_state import (
     DebateRound,
     InvestmentMemo,
     NewsFindings,
+    ResearchRecord,
     ResearchState,
 )
 
 __all__ = [
     "ResearchState",
+    "ResearchRecord",
     "AnalystFindings",
     "NewsFindings",
     "DebateRound",

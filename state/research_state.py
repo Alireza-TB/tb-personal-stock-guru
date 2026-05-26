@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Literal, Optional, TypedDict
 
 from langgraph.graph.message import add_messages
@@ -47,6 +48,21 @@ class InvestmentMemo(BaseModel):
     catalysts: list[str]
     narrative: str
     notion_url: Optional[str] = None
+
+
+class ResearchRecord(BaseModel):
+    """A complete snapshot of one research run, stored in the archive."""
+
+    timestamp: datetime
+    ticker: str
+    plan: list[str]
+    analyst_findings: AnalystFindings
+    news_findings: NewsFindings
+    bull_case: str
+    bear_case: str
+    debate_rounds: list[DebateRound]
+    final_memo: InvestmentMemo
+    tools_used: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ResearchState(TypedDict):

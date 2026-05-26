@@ -314,11 +314,103 @@ def render_portfolio_page(store) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Archive tab — helpers
+# ---------------------------------------------------------------------------
+
+def _relative_time(dt) -> str:
+    """Return a human-readable relative time string (e.g. '3d ago')."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    delta = now - dt
+    days = delta.days
+    if days < 0:
+        return "just now"
+    if days == 0:
+        hours = delta.seconds // 3600
+        if hours == 0:
+            mins = delta.seconds // 60
+            return f"{mins}m ago" if mins > 0 else "just now"
+        return f"{hours}h ago"
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return f"{days}d ago"
+    if days < 30:
+        return f"{days // 7}w ago"
+    if days < 365:
+        return f"{days // 30}mo ago"
+    return f"{days // 365}y ago"
+
+
+def _render_record_card(record, card_key: str) -> None:
+    """Render a single ResearchRecord as a styled card with a detail expander."""
+    memo = record.final_memo
+    rec_color = _REC_COLORS.get(memo.recommendation, "#555")
+    stars = "★" * memo.conviction + "☆" * (5 - memo.conviction)
+    thesis_preview = (memo.thesis[:130] + "…") if len(memo.thesis) > 130 else memo.thesis
+    date_str = record.timestamp.strftime("%Y-%m-%d")
+    rel = _relative_time(record.timestamp)
+
+    st.markdown(
+        f'<div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px 16px 10px;'
+        f'background:#fafafa;margin-bottom:4px">'
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+        f'  <span style="font-size:1.35em;font-weight:800;color:#111">{html.escape(record.ticker)}</span>'
+        f'  <span style="text-align:right;font-size:0.78em;color:#888;line-height:1.4">'
+        f'    {html.escape(date_str)}<br>{html.escape(rel)}'
+        f'  </span>'
+        f'</div>'
+        f'<div style="margin:6px 0 4px">'
+        f'  {_badge(memo.recommendation, rec_color)}'
+        f'  &nbsp;<span style="font-size:1.1em;letter-spacing:1px;color:#555">{stars}</span>'
+        f'  &nbsp;<span style="font-size:0.82em;color:#777">{html.escape(memo.time_horizon.capitalize())} horizon</span>'
+        f'</div>'
+        f'<div style="font-size:0.88em;color:#333;margin-top:6px;line-height:1.5">'
+        f'  {html.escape(thesis_preview)}'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("Details", expanded=False, icon="📋"):
+        t_plan, t_analyst, t_news, t_debate, t_memo = st.tabs(
+            ["Plan", "Analyst", "News", "Debate", "Memo"]
+        )
+        with t_plan:
+            if record.plan:
+                for i, step in enumerate(record.plan, 1):
+                    st.markdown(f"**{i}.** {step}")
+            else:
+                st.info("Research plan not captured for this entry (pre-migration).")
+        with t_analyst:
+            if record.analyst_findings.summary.startswith("(Not captured"):
+                st.info("Analyst findings not captured for this entry (pre-migration).")
+            else:
+                render_analyst_findings(record.analyst_findings)
+        with t_news:
+            if record.news_findings.summary.startswith("(Not captured"):
+                st.info("News findings not captured for this entry (pre-migration).")
+            else:
+                render_news_findings(record.news_findings)
+        with t_debate:
+            if not record.debate_rounds:
+                st.info("Debate not captured for this entry (pre-migration).")
+            else:
+                render_debate(record.bull_case, record.bear_case, record.debate_rounds)
+        with t_memo:
+            render_investment_memo(record.final_memo)
+
+
+# ---------------------------------------------------------------------------
 # Archive tab
 # ---------------------------------------------------------------------------
 
 def render_archive_page(store) -> None:
-    from memory.store import get_memo_history, list_all_tickers
+    from datetime import date, timedelta
+
+    from memory.store import get_research_records, list_all_tickers
 
     st.header("Research Archive")
     tickers = list_all_tickers(store)
@@ -327,38 +419,58 @@ def render_archive_page(store) -> None:
         st.info("No research history yet. Run research on a ticker to see it here.")
         return
 
-    # Filters
-    f1, f2 = st.columns(2)
+    # --- 3-column filters ---
+    f1, f2, f3 = st.columns(3)
     with f1:
-        filter_ticker = st.selectbox("Filter by ticker", ["All"] + tickers, key="arc_ticker")
+        filter_ticker = st.selectbox("Ticker", ["All"] + tickers, key="arc_ticker")
     with f2:
-        filter_rec = st.selectbox(
-            "Filter by recommendation", ["All", "Buy", "Hold", "Avoid", "Pass"],
-            key="arc_rec",
+        filter_rec = st.multiselect(
+            "Recommendation", ["Buy", "Hold", "Avoid", "Pass"], key="arc_rec"
+        )
+    with f3:
+        today = date.today()
+        date_range = st.date_input(
+            "Date range",
+            value=(today - timedelta(days=365), today),
+            key="arc_dates",
         )
 
-    # Collect
+    # Normalise date_range — st.date_input returns a tuple when value is a tuple
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        date_from, date_to = date_range[0], date_range[1]
+    else:
+        date_from, date_to = None, None
+
+    # --- Collect rich ResearchRecords ---
     search_tickers = tickers if filter_ticker == "All" else [filter_ticker]
-    rows: list[tuple[str, object]] = []
+    records = []
     for t in search_tickers:
-        for memo in get_memo_history(store, t, limit=20):
-            rows.append((t, memo))
+        records.extend(get_research_records(store, t, limit=50))
 
-    if filter_rec != "All":
-        rows = [(t, m) for t, m in rows if m.recommendation == filter_rec]
+    # Sort newest first
+    records.sort(key=lambda r: r.timestamp, reverse=True)
 
-    if not rows:
-        st.info("No memos match the current filters.")
-        return
+    # Apply filters
+    if filter_rec:
+        records = [r for r in records if r.final_memo.recommendation in filter_rec]
+    if date_from and date_to:
+        records = [
+            r for r in records
+            if date_from <= r.timestamp.date() <= date_to
+        ]
 
-    st.caption(f"{len(rows)} memo(s)")
-
-    for ticker, memo in rows:
-        rec_color = _REC_COLORS.get(memo.recommendation, "#555")
-        dots = "●" * memo.conviction + "○" * (5 - memo.conviction)
-        label = f"{ticker}  ·  {memo.recommendation}  ·  {dots}  ·  {memo.time_horizon}"
-        with st.expander(label, expanded=False):
-            render_investment_memo(memo)
+    # --- 2-column card grid ---
+    if records:
+        st.caption(f"{len(records)} record(s)")
+        pairs = [records[i : i + 2] for i in range(0, len(records), 2)]
+        for pair in pairs:
+            cols = st.columns(2)
+            for col, record in zip(cols, pair):
+                card_key = f"card_{record.ticker}_{record.timestamp.isoformat()}"
+                with col:
+                    _render_record_card(record, card_key)
+    else:
+        st.info("No records match the current filters.")
 
 
 # ---------------------------------------------------------------------------
