@@ -2,11 +2,6 @@
 
 A multi-agent investment research desk that runs a full buy-side workflow on any stock ticker in roughly two minutes. You type a ticker; a coordinated team of LLM agents gathers market data and SEC filings, hunts for recent news, stages a structured bull-vs-bear debate, and produces a signed investment memo with a recommendation, conviction score, and full narrative — all saved automatically to Notion and traced in LangSmith.
 
-## Screenshot
-
-![Dashboard screenshot](docs/screenshot.png)
-*Add your own screenshot here after the first run.*
-
 ---
 
 ## Architecture
@@ -154,28 +149,6 @@ Then restart Caddy: `docker compose restart caddy`.
 
 Data persists in `./data/` (SQLite databases) across container restarts.
 
-### Run the eval harness
-
-```bash
-uv run python evals/run_evals.py
-```
-
-Runs 5 tickers (AAPL, NVDA, F, PLTR, AMD), scores each memo on tool coverage, completeness, debate quality, and defensibility, and writes a markdown report to `evals/results/`. Prints a cost estimate (~$1.80) and asks for confirmation before starting. See [`evals/run_evals.py`](evals/run_evals.py).
-
----
-
-## Cost expectations
-
-| Scenario | Estimated cost |
-|----------|---------------|
-| Single run (one ticker) | ~$0.30–0.45 |
-| Full eval pass (5 tickers + judge calls) | ~$1.80–2.20 |
-| Monthly — 20 runs/month | ~$6–9 |
-
-**The only Opus call is the portfolio manager's final synthesis.** All data-gathering (analyst, news hunter) and case-building (bull, bear, debate) use Haiku or Sonnet. To reduce costs further, swap the PM model to `claude-sonnet-4-6` in [`agents/portfolio_manager.py`](agents/portfolio_manager.py) — memo quality degrades slightly but costs drop by ~60% per run.
-
-> **Note on prompt caching:** Anthropic's minimum cacheable block is 1 024 tokens (Sonnet/Opus) or 2 048 tokens (Haiku). All system prompts in this project fall below those thresholds (longest is the PM prompt at ~713 tokens), so prompt caching is not currently applied. If you extend the prompts significantly, add `cache_control={"type": "ephemeral"}` to the `SystemMessage` content block.
-
 ---
 
 ## Project structure
@@ -219,16 +192,6 @@ Runs 5 tickers (AAPL, NVDA, F, PLTR, AMD), scores each memo on tool coverage, co
 
 ---
 
-## Known limitations
-
-**Hallucination in free-text fields.** The analyst and news hunter use grounding filters (only tool-result content may appear in structured outputs; headlines are cross-checked against raw tool responses) but the bull, bear, debate, and PM narrative fields are unconstrained prose. Confident-sounding but wrong claims can appear in those fields. Treat the narrative as a reasoning scaffold, not a verified fact base.
-
-**Notion MCP requires `npx` at runtime.** The Notion save is performed by spawning `npx -y @notionhq/notion-mcp-server` as a subprocess. If `npx` is not on `PATH`, or if the Notion integration token doesn't have write access to the target database, the save is silently skipped and `InvestmentMemo.notion_url` is `None`. Run `node --version` and `npx --version` to verify prerequisites.
-
-**Prompt cache hits are not guaranteed.** The Anthropic API caches prompt blocks for 5 minutes. Back-to-back runs on the same ticker benefit from cache hits; runs spaced more than 5 minutes apart do not. Current prompts are also below the minimum cacheable token count (see Cost expectations), so caching is not active.
-
----
-
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT
